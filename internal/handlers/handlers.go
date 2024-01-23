@@ -2,16 +2,17 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-    "gorm.io/driver/postgres"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
-	"avito/cmd/config"
+	"EM/cmd/config"
 )
 
 type App struct {
@@ -34,7 +35,7 @@ type User struct {
 	Patronymic string `json:"patronymic,omitempty"`
 	Age int `json:"age,omitempty"`
 	Gender string `json:"gender,omitempty"`
-	Country []string `json:"country,omitempty"`
+	Country string `json:"country,omitempty"`
 }
 
 type GenderResponse struct {
@@ -59,7 +60,7 @@ type NationResponse struct {
 	} `json:"country"`
 }
 
-func (newUser *User) AddParams() {
+func (newUser *User) AddParams() User {
 	var genderResponse GenderResponse
 	var ageResponse AgeResponse
 	var nationResponse NationResponse
@@ -77,9 +78,7 @@ func (newUser *User) AddParams() {
 	response.Body.Close()
 	// распарсим возраст
 
-	json.Unmarshal([]byte(body), &genderResponse)
-
-	newUser.Gender = genderResponse.Gender
+	json.Unmarshal([]byte(body), &ageResponse)
 	// запрос пола
 	response, err = http.Get("https://api.genderize.io/?name="+newUser.Name)
 	if err != nil {
@@ -93,9 +92,8 @@ func (newUser *User) AddParams() {
 	response.Body.Close()
 	// распарсим пол
 
-	json.Unmarshal([]byte(body), &ageResponse)
+	json.Unmarshal([]byte(body), &genderResponse)
 
-	newUser.Age = ageResponse.Age
 	// запрос национальности
 	response, err = http.Get("https://api.nationalize.io/?name="+newUser.Name)
 	if err != nil {
@@ -107,13 +105,20 @@ func (newUser *User) AddParams() {
 		log.Fatal(err)
 	}
 	response.Body.Close()
-	// распарсим национальности
+	// распарсим национальность
 
 	json.Unmarshal([]byte(body), &nationResponse)
 
-	for _, nation := range nationResponse.Country {
-		newUser.Country = append(newUser.Country, nation.CountryID)
+	dataUser := User{
+		Name: newUser.Name,
+		Surname: newUser.Surname,
+		Patronymic: newUser.Patronymic,
+		Gender: genderResponse.Gender,
+		Age: ageResponse.Age,
+		Country: nationResponse.Country[0].CountryID,
 	}
+
+	return dataUser
 }
 
 func (newApp *App) AddUser(c *gin.Context) {
@@ -135,8 +140,10 @@ func (newApp *App) AddUser(c *gin.Context) {
 	}
 	// обогащаем нового пользователя
 	
-	newUser.AddParams()
+	newUser = newUser.AddParams()
 	
+	fmt.Println(newUser)
+
 	//добавляем нового пользователя в таблицу
 	log.Debug("adding to the DB")
 	db, err := gorm.Open(postgres.Open(newApp.Cfg.PostgresDBAddr), &gorm.Config{})
@@ -151,11 +158,8 @@ func (newApp *App) AddUser(c *gin.Context) {
 			"запись не добавлена в базу данных": result.Error,
 		})
 	} else {
-		//отправляем айдишник добавленного сегмента
-		c.JSON(http.StatusCreated, gin.H{
-			"id added": newUser.ID,
-			"name added": newUser.Name,
-		})
+		//отправляем добавленный сегмент
+		c.JSON(http.StatusCreated, &newUser)
 	}
 	}
 	
@@ -180,11 +184,7 @@ func (newApp *App) RemoveUser(c *gin.Context) {
 			"запись не удалена": result.Error,
 		})
 	} else {
-		//отправляем имя удаленного
-		c.JSON(http.StatusOK, gin.H{
-			"name deleted": newUser.Name,
-			"surname deleted": newUser.Surname,
-		})
+		c.Status(http.StatusOK)
 	}
 }
 

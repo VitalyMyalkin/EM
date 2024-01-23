@@ -1,10 +1,10 @@
-module avito
+module EM
 
 go 1.19
 
 require (
-	github.com/caarlos0/env/v8 v8.0.0
 	github.com/gin-gonic/gin v1.9.1
+	github.com/joho/godotenv v1.5.1
 	github.com/sirupsen/logrus v1.4.2
 	gorm.io/driver/postgres v1.5.4
 	gorm.io/gorm v1.25.5
